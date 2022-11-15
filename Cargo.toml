@@ -1,0 +1,43 @@
+[package]
+name = "bevy_mod_gltf_patched"
+version = "0.9.0"
+edition = "2021"
+description = "Bevy Engine GLTF loading"
+homepage = "https://bevyengine.org"
+repository = "https://github.com/komadori/bevy_mod_gltf_patched"
+license = "MIT OR Apache-2.0"
+keywords = ["bevy"]
+
+[dependencies]
+bevy = { version = "0.9", default-features = false, features = [
+    "bevy_asset",
+    "bevy_scene",
+    "render",
+] }
+gltf = { version = "1.0.0", default-features = false, features = [
+    "KHR_lights_punctual",
+    "KHR_materials_unlit",
+    "extras",
+    "names",
+    "utils",
+] }
+thiserror = "1.0"
+anyhow = "1.0.4"
+base64 = "0.13.0"
+percent-encoding = "2.1"
+
+[dev-dependencies]
+bevy = { version = "0.9", default-features = false, features = [
+    "bevy_winit",
+    "x11",
+] }
+
+[[example]]
+name = "custom_gltf_2d"
+path = "examples/custom_gltf_2d.rs"
+
+[package.metadata.example.custom_gltf_2d]
+name = "Custom glTF vertex attribute 2D"
+description = "Renders a glTF mesh in 2D with a custom vertex attribute"
+category = "2D Rendering"
+wasm = true
