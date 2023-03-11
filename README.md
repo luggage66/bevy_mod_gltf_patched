@@ -12,7 +12,7 @@ will be deprecated once such functionality is available in mainline Bevy.
 
 ```toml
 [dependencies]
-bevy_mod_gltf_patched = "0.1"
+bevy_mod_gltf_patched = "0.2"
 ```
 
 ## Example
@@ -29,6 +29,7 @@ cargo run --example custom_gltf_2d
 | This Version | Bevy version |
 |--------------|--------------|
 | 0.1.x        | 0.9.x        |
+| 0.2.x        | 0.10.x       |
 
 ## Licence
 

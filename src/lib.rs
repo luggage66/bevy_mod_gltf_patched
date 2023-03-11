@@ -1,4 +1,4 @@
-#[cfg(feature = "bevy::animation")]
+#[cfg(feature = "bevy_animation")]
 use bevy::animation::AnimationClip;
 use bevy::utils::HashMap;
 
@@ -67,35 +67,40 @@ pub struct Gltf {
     pub nodes: Vec<Handle<GltfNode>>,
     pub named_nodes: HashMap<String, Handle<GltfNode>>,
     pub default_scene: Option<Handle<Scene>>,
-    #[cfg(feature = "bevy::animation")]
+    #[cfg(feature = "bevy_animation")]
     pub animations: Vec<Handle<AnimationClip>>,
-    #[cfg(feature = "bevy::animation")]
+    #[cfg(feature = "bevy_animation")]
     pub named_animations: HashMap<String, Handle<AnimationClip>>,
 }
 
-/// A glTF node with all of its child nodes, its [`GltfMesh`] and
-/// [`Transform`](bevy::transform::prelude::Transform).
+/// A glTF node with all of its child nodes, its [`GltfMesh`],
+/// [`Transform`](bevy_transform::prelude::Transform) and an optional [`GltfExtras`].
 #[derive(Debug, Clone, TypeUuid)]
 #[uuid = "dad74750-1fd6-460f-ac51-0a7937563865"]
 pub struct GltfNode {
     pub children: Vec<GltfNode>,
     pub mesh: Option<Handle<GltfMesh>>,
     pub transform: bevy::transform::prelude::Transform,
+    pub extras: Option<GltfExtras>,
 }
 
-/// A glTF mesh, which may consist of multiple [`GltfPrimitives`](GltfPrimitive).
+/// A glTF mesh, which may consist of multiple [`GltfPrimitives`](GltfPrimitive)
+/// and an optional [`GltfExtras`].
 #[derive(Debug, Clone, TypeUuid)]
 #[uuid = "8ceaec9a-926a-4f29-8ee3-578a69f42315"]
 pub struct GltfMesh {
     pub primitives: Vec<GltfPrimitive>,
+    pub extras: Option<GltfExtras>,
 }
 
-/// Part of a [`GltfMesh`] that consists of a [`Mesh`] and an optional [`StandardMaterial`].
+/// Part of a [`GltfMesh`] that consists of a [`Mesh`], an optional [`StandardMaterial`] and [`GltfExtras`].
 #[derive(Debug, Clone, TypeUuid)]
 #[uuid = "cbfca302-82fd-41cb-af77-cab6b3d50af1"]
 pub struct GltfPrimitive {
     pub mesh: Handle<Mesh>,
     pub material: Option<Handle<StandardMaterial>>,
+    pub extras: Option<GltfExtras>,
+    pub material_extras: Option<GltfExtras>,
 }
 
 #[derive(Clone, Debug, Reflect, Default, Component)]

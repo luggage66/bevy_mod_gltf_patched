@@ -3,7 +3,7 @@ use bevy::asset::{
     AssetIoError, AssetLoader, AssetPath, BoxedFuture, Handle, LoadContext, LoadedAsset,
 };
 use bevy::core::Name;
-use bevy::core_pipeline::prelude::Camera3d;
+use bevy::core_pipeline::prelude::Camera3dBundle;
 use bevy::ecs::{entity::Entity, world::World};
 use bevy::hierarchy::{BuildWorldChildren, WorldChildBuilder};
 use bevy::log::warn;
@@ -13,22 +13,18 @@ use bevy::pbr::{
     SpotLight, SpotLightBundle, StandardMaterial,
 };
 use bevy::render::{
-    camera::{
-        Camera, CameraRenderGraph, OrthographicProjection, PerspectiveProjection, Projection,
-        ScalingMode,
-    },
+    camera::{Camera, OrthographicProjection, PerspectiveProjection, Projection, ScalingMode},
     color::Color,
     mesh::{
         skinning::{SkinnedMesh, SkinnedMeshInverseBindposes},
         Indices, Mesh, MeshVertexAttribute, VertexAttributeValues,
     },
     prelude::SpatialBundle,
-    primitives::{Aabb, Frustum},
+    primitives::Aabb,
     render_resource::{
         AddressMode, Face, FilterMode, PrimitiveTopology, SamplerDescriptor, VertexFormat,
     },
     texture::{CompressedImageFormats, Image, ImageSampler, ImageType, TextureError},
-    view::VisibleEntities,
 };
 use bevy::scene::Scene;
 #[cfg(not(target_arch = "wasm32"))]
@@ -48,7 +44,7 @@ use gltf::{
 use std::{collections::VecDeque, path::Path};
 use thiserror::Error;
 
-use crate::{Gltf, GltfNode};
+use crate::{Gltf, GltfExtras, GltfNode};
 
 /// An error that occurs when loading a glTF file.
 #[derive(Error, Debug)]
@@ -357,7 +353,7 @@ async fn load_gltf<'a, 'b>(
         }
     }
 
-    #[cfg(feature = "bevy::animation")]
+    #[cfg(feature = "bevy_animation")]
     let paths = {
         let mut paths = HashMap::<usize, (usize, Vec<Name>)>::new();
         for scene in gltf.scenes() {
@@ -369,13 +365,13 @@ async fn load_gltf<'a, 'b>(
         paths
     };
 
-    #[cfg(feature = "bevy::animation")]
+    #[cfg(feature = "bevy_animation")]
     let (animations, named_animations, animation_roots) = {
         let mut animations = vec![];
         let mut named_animations = HashMap::default();
         let mut animation_roots = HashSet::default();
         for animation in gltf.animations() {
-            let mut animation_clip = bevy::animation::AnimationClip::default();
+            let mut animation_clip = bevy_animation::AnimationClip::default();
             for channel in animation.channels() {
                 match channel.sampler().interpolation() {
                     gltf::animation::Interpolation::Linear => (),
@@ -402,15 +398,15 @@ async fn load_gltf<'a, 'b>(
                 let keyframes = if let Some(outputs) = reader.read_outputs() {
                     match outputs {
                         gltf::animation::util::ReadOutputs::Translations(tr) => {
-                            bevy::animation::Keyframes::Translation(tr.map(Vec3::from).collect())
+                            bevy_animation::Keyframes::Translation(tr.map(Vec3::from).collect())
                         }
                         gltf::animation::util::ReadOutputs::Rotations(rots) => {
-                            bevy::animation::Keyframes::Rotation(
+                            bevy_animation::Keyframes::Rotation(
                                 rots.into_f32().map(bevy::math::Quat::from_array).collect(),
                             )
                         }
                         gltf::animation::util::ReadOutputs::Scales(scale) => {
-                            bevy::animation::Keyframes::Scale(scale.map(Vec3::from).collect())
+                            bevy_animation::Keyframes::Scale(scale.map(Vec3::from).collect())
                         }
                         gltf::animation::util::ReadOutputs::MorphTargetWeights(_) => {
                             warn!("Morph animation property not yet supported");
@@ -425,10 +421,10 @@ async fn load_gltf<'a, 'b>(
                 if let Some((root_index, path)) = paths.get(&node.index()) {
                     animation_roots.insert(root_index);
                     animation_clip.add_curve_to_path(
-                        bevy::animation::EntityPath {
+                        bevy_animation::EntityPath {
                             parts: path.clone(),
                         },
-                        bevy::animation::VariableCurve {
+                        bevy_animation::VariableCurve {
                             keyframe_timestamps,
                             keyframes,
                         },
@@ -582,12 +578,17 @@ async fn load_gltf<'a, 'b>(
                     .material()
                     .index()
                     .and_then(|i| materials.get(i).cloned()),
+                extras: get_gltf_extras(primitive.extras()),
+                material_extras: get_gltf_extras(primitive.material().extras()),
             });
         }
 
         let handle = load_context.set_labeled_asset(
             &mesh_label(&mesh),
-            LoadedAsset::new(super::GltfMesh { primitives }),
+            LoadedAsset::new(super::GltfMesh {
+                primitives,
+                extras: get_gltf_extras(mesh.extras()),
+            }),
         );
         if let Some(name) = mesh.name() {
             named_meshes.insert(name.to_string(), handle.clone());
@@ -621,6 +622,7 @@ async fn load_gltf<'a, 'b>(
                         scale: bevy::math::Vec3::from(scale),
                     },
                 },
+                extras: get_gltf_extras(node.extras()),
             },
             node.children()
                 .map(|child| child.index())
@@ -718,7 +720,7 @@ async fn load_gltf<'a, 'b>(
         let mut entity_to_skin_index_map = HashMap::new();
 
         world
-            .spawn(SpatialBundle::VISIBLE_IDENTITY)
+            .spawn(SpatialBundle::INHERITED_IDENTITY)
             .with_children(|parent| {
                 for node in scene.nodes() {
                     let result = load_node(
@@ -739,7 +741,7 @@ async fn load_gltf<'a, 'b>(
             return Err(err);
         }
 
-        #[cfg(feature = "bevy::animation")]
+        #[cfg(feature = "bevy_animation")]
         {
             // for each node root in a scene, check if it's the root of an animation
             // if it is, add the AnimationPlayer component
@@ -747,7 +749,7 @@ async fn load_gltf<'a, 'b>(
                 if animation_roots.contains(&node.index()) {
                     world
                         .entity_mut(*node_index_to_entity_map.get(&node.index()).unwrap())
-                        .insert(bevy::animation::AnimationPlayer::default());
+                        .insert(bevy_animation::AnimationPlayer::default());
                 }
             }
         }
@@ -788,13 +790,19 @@ async fn load_gltf<'a, 'b>(
         named_materials,
         nodes,
         named_nodes,
-        #[cfg(feature = "bevy::animation")]
+        #[cfg(feature = "bevy_animation")]
         animations,
-        #[cfg(feature = "bevy::animation")]
+        #[cfg(feature = "bevy_animation")]
         named_animations,
     }));
 
     Ok(())
+}
+
+fn get_gltf_extras(extras: &gltf::json::Extras) -> Option<GltfExtras> {
+    extras.as_ref().map(|extras| super::GltfExtras {
+        value: extras.get().to_string(),
+    })
 }
 
 fn node_name(node: &Node) -> Name {
@@ -805,7 +813,7 @@ fn node_name(node: &Node) -> Name {
     Name::new(name)
 }
 
-#[cfg(feature = "bevy::animation")]
+#[cfg(feature = "bevy_animation")]
 fn paths_recur(
     node: Node,
     current_path: &[Name],
@@ -922,7 +930,7 @@ fn load_material(material: &Material, load_context: &mut LoadContext) -> Handle<
     load_context.set_labeled_asset(
         &material_label,
         LoadedAsset::new(StandardMaterial {
-            base_color: Color::rgba(color[0], color[1], color[2], color[3]),
+            base_color: Color::rgba_linear(color[0], color[1], color[2], color[3]),
             base_color_texture,
             perceptual_roughness: pbr.roughness_factor(),
             metallic: pbr.metallic_factor(),
@@ -935,7 +943,7 @@ fn load_material(material: &Material, load_context: &mut LoadContext) -> Handle<
                 Some(Face::Back)
             },
             occlusion_texture,
-            emissive: Color::rgba(emissive[0], emissive[1], emissive[2], 1.0),
+            emissive: Color::rgb_linear(emissive[0], emissive[1], emissive[2]),
             emissive_texture,
             unlit: material.unlit(),
             alpha_mode: alpha_mode(material),
@@ -955,9 +963,8 @@ fn load_node(
 ) -> Result<(), GltfError> {
     let transform = gltf_node.transform();
     let mut gltf_error = None;
-    let mut node = world_builder.spawn(SpatialBundle::from(Transform::from_matrix(
-        Mat4::from_cols_array_2d(&transform.matrix()),
-    )));
+    let transform = Transform::from_matrix(Mat4::from_cols_array_2d(&transform.matrix()));
+    let mut node = world_builder.spawn(SpatialBundle::from(transform));
 
     node.insert(node_name(gltf_node));
 
@@ -972,9 +979,9 @@ fn load_node(
         let projection = match camera.projection() {
             gltf::camera::Projection::Orthographic(orthographic) => {
                 let xmag = orthographic.xmag();
-                let orthographic_projection: OrthographicProjection = OrthographicProjection {
-                    far: orthographic.zfar(),
+                let orthographic_projection = OrthographicProjection {
                     near: orthographic.znear(),
+                    far: orthographic.zfar(),
                     scaling_mode: ScalingMode::FixedHorizontal(1.0),
                     scale: xmag,
                     ..Default::default()
@@ -997,18 +1004,15 @@ fn load_node(
                 Projection::Perspective(perspective_projection)
             }
         };
-
-        node.insert((
+        node.insert(Camera3dBundle {
             projection,
-            Camera {
+            transform,
+            camera: Camera {
                 is_active: !*active_camera_found,
                 ..Default::default()
             },
-            VisibleEntities::default(),
-            Frustum::default(),
-            Camera3d::default(),
-            CameraRenderGraph::new(bevy::core_pipeline::core_3d::graph::NAME),
-        ));
+            ..Default::default()
+        });
 
         *active_camera_found = true;
     }
@@ -1419,6 +1423,7 @@ mod test {
                 children: vec![],
                 mesh: None,
                 transform: bevy::transform::prelude::Transform::IDENTITY,
+                extras: None,
             }
         }
     }
