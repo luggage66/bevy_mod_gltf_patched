@@ -17,7 +17,7 @@ bevy = { version = "0.11", default-features = false, features = [
     "bevy_render",
     "bevy_scene",
 ] }
-gltf = { version = "1.2.0", default-features = false, features = [
+gltf = { version = "^1.0.0", default-features = false, features = [
     "KHR_lights_punctual",
     "KHR_materials_unlit",
     "extras",
@@ -25,9 +25,9 @@ gltf = { version = "1.2.0", default-features = false, features = [
     "utils",
 ] }
 thiserror = "1.0"
-anyhow = "1.0.71"
+anyhow = "^1.0.70"
 base64 = "0.13.0"
-percent-encoding = "2.3"
+percent-encoding = "^2.1"
 
 [dev-dependencies]
 bevy = { version = "0.11", default-features = false, features = [
